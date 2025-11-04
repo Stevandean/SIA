@@ -1,15 +1,185 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
-  provider = "prisma-client"
-  output   = "../lib/generated/prisma"
+  provider = "prisma-client-js"
 }
 
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+}
+
+// User model for authentication
+model User {
+  id        String   @id @default(uuid())
+  name      String
+  email     String   @unique
+  password  String
+  role      UserRole @default(KASIR)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  auditTrails AuditTrail[]
+
+  @@map("users")
+}
+
+enum UserRole {
+  ADMIN
+  KASIR
+}
+
+// Customer model
+model Customer {
+  id        String   @id @default(uuid())
+  name      String
+  phone     String?
+  address   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  cashRevenues       CashRevenue[]
+  creditRevenues     CreditRevenue[]
+
+  @@map("customers")
+}
+
+// Chart of Accounts
+model Account {
+  id        String      @id @default(uuid())
+  code      String      @unique
+  name      String
+  type      AccountType
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  // Relations
+  journalLines JournalLine[]
+
+  @@map("accounts")
+}
+
+enum AccountType {
+  ASSET
+  LIABILITY
+  EQUITY
+  REVENUE
+  EXPENSE
+}
+
+// Journal Entry (Header)
+model JournalEntry {
+  id          String   @id @default(uuid())
+  date        DateTime @default(now())
+  description String
+  reference   String?  // Reference to source transaction
+  refType     String?  // Type: CASH_REVENUE, CREDIT_REVENUE, etc.
+  refId       String?  // ID of source transaction
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  lines JournalLine[]
+
+  @@map("journal_entries")
+}
+
+// Journal Entry Lines (Detail)
+model JournalLine {
+  id             String   @id @default(uuid())
+  journalEntryId String
+  accountId      String
+  debit          Float    @default(0)
+  credit         Float    @default(0)
+  createdAt      DateTime @default(now())
+
+  // Relations
+  journalEntry JournalEntry @relation(fields: [journalEntryId], references: [id], onDelete: Cascade)
+  account      Account      @relation(fields: [accountId], references: [id])
+
+  @@map("journal_lines")
+}
+
+// Cash Revenue Transaction
+model CashRevenue {
+  id          String   @id @default(uuid())
+  date        DateTime @default(now())
+  customerId  String?
+  amount      Float
+  description String
+  journalId   String?  // Link to journal entry
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  customer Customer? @relation(fields: [customerId], references: [id])
+
+  @@map("cash_revenues")
+}
+
+// Credit Revenue Transaction
+model CreditRevenue {
+  id          String   @id @default(uuid())
+  date        DateTime @default(now())
+  customerId  String
+  amount      Float
+  dueDate     DateTime
+  description String   @default("Penjualan Kredit")
+  status      String   @default("UNPAID") // UNPAID, PARTIAL, PAID
+  paidAmount  Float    @default(0)
+  journalId   String?  // Link to journal entry
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  customer  Customer              @relation(fields: [customerId], references: [id])
+  payments  ReceivablePayment[]
+
+  @@map("credit_revenues")
+}
+
+// Receivable Payment
+model ReceivablePayment {
+  id             String   @id @default(uuid())
+  creditId       String
+  date           DateTime @default(now())
+  amount         Float
+  description    String   @default("Pembayaran Piutang")
+  journalId      String?  // Link to journal entry
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  // Relations
+  creditRevenue CreditRevenue @relation(fields: [creditId], references: [id])
+
+  @@map("receivable_payments")
+}
+
+// Other Income
+model OtherIncome {
+  id          String   @id @default(uuid())
+  date        DateTime @default(now())
+  description String
+  amount      Float
+  journalId   String?  // Link to journal entry
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("other_incomes")
+}
+
+// Audit Trail
+model AuditTrail {
+  id          String   @id @default(uuid())
+  userId      String
+  action      String   // CREATE, UPDATE, DELETE
+  entity      String   // Table name
+  entityId    String   // Record ID
+  description String
+  createdAt   DateTime @default(now())
+
+  // Relations
+  user User @relation(fields: [userId], references: [id])
+
+  @@map("audit_trails")
 }
